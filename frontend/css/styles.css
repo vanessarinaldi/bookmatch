@@ -1,5 +1,22 @@
 
-/* 1. Configuración general */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --plum: #69465f;
+    --dark: #392637;
+    --deep: #2c1e2c;
+    --light-plum: #896780;
+    --rose: #e9cbdc;
+    --light-rose: #f7eaf2;
+    --cream: #fbf7f0;
+    --paper: #fffdf9;
+    --text: #392f39;
+    --muted: #756777;
+    --border: #eadde5;
+    --title-font: 'Cormorant Garamond', Georgia, serif;
+    --body-font: 'Nunito', 'Segoe UI', Arial, sans-serif;
+    --shadow: 0 6px 22px rgba(57, 38, 55, .08);
+}
 
 * {
     box-sizing: border-box;
@@ -8,13 +25,17 @@
 }
 
 body {
-    font-family: Arial, Helvetica, sans-serif;
-    color: #202123;
-    background: #f5f5f7;
+    font-family: var(--body-font);
+    color: var(--text);
+    background: var(--cream);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
 }
 
 button,
-input {
+input,
+textarea {
     font: inherit;
 }
 
@@ -22,207 +43,687 @@ button {
     cursor: pointer;
 }
 
-/* 2. Estructura principal */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+    outline: 2px solid #c18eae;
+    outline-offset: 3px;
+}
+
+::selection {
+    background: var(--rose);
+    color: var(--dark);
+}
+
+/* ==========================================
+   ESTRUCTURA PRINCIPAL
+   ========================================== */
 
 .app {
     display: flex;
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
+    background: var(--paper);
 }
 
-/* 3. Barra lateral */
+/* ==========================================
+   BARRA LATERAL
+   ========================================== */
 
 .sidebar {
-    width: 260px;
+    width: 250px;
     flex-shrink: 0;
-    background: #202123;
-    color: white;
-    padding: 24px 16px;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 15px;
+    padding: 20px 14px 16px;
+    overflow-y: auto;
+    color: #fffaf7;
+    background:
+        radial-gradient(circle at top left, #63445f 0%, transparent 48%),
+        linear-gradient(160deg, var(--dark), var(--deep));
+    scrollbar-width: thin;
+    scrollbar-color: #806781 transparent;
 }
 
-.sidebar h2 {
-    font-size: 22px;
+/* Logo */
+
+.sidebar-brand {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 150px;
+    height: 150px;
+    flex-shrink: 0;
+    margin: 0 auto 4px;
+    padding: 12px;
+    background: #fbf0f5;
+    border: 2px solid #e9cbdc;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 5px 18px rgba(0, 0, 0, .15);
 }
+
+.sidebar-brand img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 50%;
+}
+
+/* Botón nuevo chat */
 
 .new-chat {
-    padding: 12px;
-    border: 1px solid #55565a;
-    border-radius: 8px;
-    color: white;
-    background: transparent;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #80677c;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .06);
+    color: #fffaf7;
     text-align: left;
+    font-weight: 800;
+    transition: background .2s, border-color .2s;
 }
 
 .new-chat:hover {
-    background: #343539;
+    background: rgba(233, 203, 220, .16);
+    border-color: #c8a9c0;
 }
 
 .sidebar-label {
-    color: #a6a6a6;
-    font-size: 13px;
+    margin-top: 3px;
+    color: #f0ddeb;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* ==========================================
+   HISTORIAL DE CONVERSACIONES
+   ========================================== */
+
+#chat-history {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.chat-history {
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #fffaf7;
+    box-shadow: none;
+}
+
+.chat-history-title {
+    margin: 0 0 7px;
+    padding: 0 2px;
+    color: #fff4fa;
+    font-family: var(--title-font);
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.chat-history-empty {
+    padding: 8px 2px;
+    color: #e0d0df;
+    font-size: 12px;
+}
+
+.chat-history-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin: 0;
+    padding: 3px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .07);
+    transition: background .2s, border-color .2s;
+}
+
+.chat-history-item:hover {
+    background: rgba(255, 255, 255, .14);
+    border-color: #80677c;
+}
+
+.chat-history-item.active {
+    background: #f0ddeb;
+    border-color: #d6b6cc;
+    box-shadow: inset 3px 0 #c28eae;
+}
+
+.chat-history-open {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 7px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #fffaf7;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.chat-history-open:hover {
+    background: rgba(255, 255, 255, .08);
+}
+
+.chat-history-item.active .chat-history-open {
+    color: var(--dark);
+}
+
+.chat-history-delete {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #f4dce9;
+}
+
+.chat-history-delete:hover {
+    background: #f8dfe3;
+    color: #922b48;
+}
+
+.chat-history-item.active .chat-history-delete {
+    color: #75445f;
+}
+
+.chat-history-delete-all {
+    width: 100%;
+    margin-top: 7px;
+    padding: 8px;
+    border: 1px solid #80677c;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .07);
+    color: #fff4fa;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.chat-history-delete-all:hover {
+    background: rgba(255, 255, 255, .16);
+}
+
+.chat-history button:focus-visible {
+    outline: 2px solid #e9cbdc;
+    outline-offset: 2px;
 }
 
 .sidebar-footer {
     margin-top: auto;
-    color: #a6a6a6;
-    font-size: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, .14);
+    color: #e0d0df;
+    font-size: 11px;
 }
 
-/* 4. Área del chat */
+/* ==========================================
+   ÁREA PRINCIPAL
+   ========================================== */
 
 .chat {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: #ffffff;
+    background:
+        radial-gradient(ellipse at top right, rgba(234, 216, 229, .25), transparent 45%),
+        var(--paper);
 }
 
 .chat-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 18px 28px;
-    border-bottom: 1px solid #eeeeee;
+    padding: 14px 26px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 253, 249, .97);
 }
 
 .chat-header h1 {
-    font-size: 17px;
-    margin-bottom: 4px;
+    color: var(--dark);
+    font-family: var(--title-font);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.15;
 }
 
 .status {
-    color: #777777;
-    font-size: 13px;
+    color: var(--muted);
+    font-size: 12px;
 }
 
-.avatar,
-.welcome-icon {
-    display: grid;
-    place-items: center;
-    background: #eee8ff;
-    color: #7052c8;
-    border-radius: 50%;
+/* Logo del encabezado */
+
+.header-logo {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    object-fit: contain;
 }
+
+/* Avatar de los mensajes */
 
 .avatar {
-    width: 42px;
-    height: 42px;
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(137, 103, 128, .15);
+    border-radius: 50%;
+    background: linear-gradient(145deg, #f2dce9, #e4c7dc);
+    color: var(--plum);
+    font-size: 21px;
 }
 
-/* 5. Mensajes */
+/* ==========================================
+   MENSAJES Y BIENVENIDA
+   ========================================== */
 
 .messages {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 32px max(24px, calc((100% - 760px) / 2));
+    padding: 25px max(20px, calc((100% - 850px) / 2));
+    scrollbar-width: thin;
+    scrollbar-color: #ddced9 transparent;
+}
+
+.messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.messages::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background: #ddced9;
 }
 
 .welcome {
     min-height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
+    gap: 13px;
+    padding: 20px 10px;
     text-align: center;
-    gap: 16px;
 }
 
+/* Libro cerrado con corazón */
+
 .welcome-icon {
-    width: 64px;
-    height: 64px;
-    font-size: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 90px;
+    height: 90px;
+    flex-shrink: 0;
+    margin: 0 auto 12px;
+    border: 1px solid #e9cbdc;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #fbf0f5, #ead2e2);
+    box-shadow: 0 5px 16px rgba(105, 70, 95, .08);
+    overflow: hidden;
+}
+
+.welcome-icon img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 5px;
+    object-fit: contain;
+    object-position: center;
 }
 
 .welcome h2 {
-    font-size: 26px;
+    margin-bottom: 12px;
+    color: var(--dark);
+    font-family: var(--title-font);
+    font-size: clamp(30px, 4vw, 40px);
+    font-weight: 700;
+    line-height: 1.15;
 }
 
 .welcome p {
-    color: #777777;
-    line-height: 1.6;
+    max-width: 460px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.8;
 }
 
-/* Clases que usará JavaScript */
+/* ==========================================
+   MENSAJES DEL CHAT
+   ========================================== */
 
 .message {
-    max-width: 85%;
     width: fit-content;
-    padding: 14px 18px;
-    margin-bottom: 20px;
-    border-radius: 18px;
-    line-height: 1.6;
+    max-width: 85%;
+    margin-bottom: 17px;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.75;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
+    animation: appear .2s ease-out;
 }
 
 .message.user {
     margin-left: auto;
-    background: #eee8ff;
+    border: 1px solid #dfc0d5;
     border-bottom-right-radius: 5px;
+    background: linear-gradient(135deg, #ead2e2, #e3c4d9);
+    color: var(--dark);
 }
 
 .message.assistant {
     margin-right: auto;
-    background: #f3f4f6;
+    border: 1px solid #eee5dc;
     border-bottom-left-radius: 5px;
+    background: #f6f0e9;
+    color: var(--text);
 }
 
-/* 6. Formulario */
+@keyframes appear {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ==========================================
+   TARJETAS DE LIBROS
+   ========================================== */
+
+.book-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+    margin: 8px 0 24px;
+    animation: appear .25s ease-out;
+}
+
+.book-card {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    padding: 15px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+    transition: transform .2s, box-shadow .2s;
+}
+
+.book-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px rgba(57, 38, 55, .12);
+}
+
+/* Contenedor uniforme de las portadas */
+
+.book-cover {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 230px;
+    min-width: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--cream);
+}
+
+/* Portada original: conserva sus proporciones */
+
+.book-card .book-cover-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 8px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    object-fit: contain;
+    object-position: center;
+}
+
+/* Portada de reemplazo */
+
+.book-card .book-no-cover {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #f8eaf2, #ead8e5);
+}
+
+.book-card .book-no-cover img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    padding: 10px;
+    object-fit: contain;
+    object-position: center;
+}
+
+/* Información del libro */
+
+.book-details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.book-details h3 {
+    color: var(--dark);
+    font-family: var(--title-font);
+    font-size: 23px;
+    font-weight: 700;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.book-author {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.book-genre {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 20px;
+    background: var(--light-rose);
+    color: var(--plum);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.book-details p {
+    max-width: 100%;
+    font-size: 12px;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+}
+
+.book-reason {
+    color: var(--light-plum);
+    font-style: italic;
+}
+
+/* Botón para ver el libro */
+
+.book-card a {
+    display: inline-flex;
+    align-self: flex-start;
+    justify-content: center;
+    margin-top: auto;
+    padding: 9px 13px;
+    border-radius: 10px;
+    background: var(--plum);
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.book-card a:hover {
+    background: var(--dark);
+}
+
+/* ==========================================
+   FORMULARIO DEL CHAT
+   ========================================== */
 
 .chat-form {
     display: flex;
-    gap: 12px;
-    width: min(800px, calc(100% - 48px));
+    align-items: center;
+    gap: 8px;
+    width: min(850px, calc(100% - 40px));
     margin: 0 auto;
-    padding: 8px;
-    border: 1px solid #dddddd;
+    padding: 7px 8px 7px 14px;
+    border: 1px solid #e2d5df;
     border-radius: 16px;
-    box-shadow: 0 3px 15px #00000008;
+    background: white;
+    box-shadow: var(--shadow);
+}
+
+.chat-form:focus-within {
+    border-color: #b69ab2;
+    box-shadow: 0 0 0 3px rgba(182, 154, 178, .15);
 }
 
 .chat-form input {
     flex: 1;
     min-width: 0;
-    border: none;
-    outline: none;
-    padding: 12px;
+    padding: 10px 3px;
+    border: 0;
+    outline: 0;
     background: transparent;
+    color: var(--text);
+    font-size: 14px;
+}
+
+.chat-form input::placeholder {
+    color: #8b7c89;
 }
 
 .chat-form button {
-    padding: 12px 20px;
-    border: none;
+    flex-shrink: 0;
+    padding: 10px 18px;
+    border: 0;
     border-radius: 10px;
-    background: #7052c8;
+    background: var(--plum);
     color: white;
+    font-size: 12px;
+    font-weight: 800;
 }
 
 .chat-form button:hover {
-    background: #5b40ae;
+    background: var(--dark);
 }
 
 .disclaimer {
-    padding: 14px 12px 18px;
+    padding: 10px 12px 13px;
+    color: #756777;
+    font-size: 10px;
     text-align: center;
-    color: #888888;
-    font-size: 12px;
 }
+
+/* ==========================================
+   ACCESIBILIDAD
+   ========================================== */
 
 .sr-only {
     position: absolute;
     width: 1px;
     height: 1px;
+    padding: 0;
+    margin: -1px;
     overflow: hidden;
-    clip-path: inset(50%);
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
-/* 7. Adaptación a celulares */
+/* ==========================================
+   TABLETAS
+   ========================================== */
+
+@media (max-width: 900px) {
+    .sidebar {
+        width: 225px;
+        padding: 18px 11px 14px;
+    }
+
+    .sidebar-brand {
+        width: 135px;
+        height: 135px;
+    }
+
+    .messages {
+        padding: 22px 18px;
+    }
+
+    .chat-header {
+        padding: 13px 18px;
+    }
+
+    .book-card {
+        padding: 12px;
+    }
+
+    .book-cover {
+        height: 210px;
+    }
+}
+
+/* ==========================================
+   CELULARES
+   ========================================== */
 
 @media (max-width: 600px) {
     .sidebar {
@@ -230,23 +731,134 @@ button {
     }
 
     .chat-header {
-        padding: 14px 18px;
+        gap: 10px;
+        padding: 12px 14px;
+    }
+
+    .chat-header h1 {
+        font-size: 25px;
+    }
+
+    .header-logo,
+    .avatar {
+        width: 38px;
+        height: 38px;
     }
 
     .messages {
-        padding: 24px 16px;
+        padding: 18px 12px;
+    }
+
+    .welcome {
+        gap: 12px;
+    }
+
+    .welcome-icon {
+        width: 76px;
+        height: 76px;
+        margin-bottom: 10px;
     }
 
     .welcome h2 {
-        font-size: 22px;
+        font-size: 30px;
+    }
+
+    .welcome p {
+        font-size: 13px;
+    }
+
+    .message {
+        max-width: 94%;
+        padding: 11px 13px;
+        font-size: 13px;
+    }
+
+    .book-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .book-card {
+        display: grid;
+        grid-template-columns: 110px minmax(0, 1fr);
+        align-items: start;
+        column-gap: 12px;
+        row-gap: 8px;
+        padding: 11px;
+    }
+
+    /* Portada a la izquierda */
+
+    .book-card .book-cover {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        width: 110px;
+        height: 160px;
+        align-self: start;
+    }
+
+    .book-card .book-cover-image {
+        width: 100%;
+        height: 100%;
+        padding: 4px;
+        object-fit: contain;
+    }
+
+    .book-card .book-cover .book-no-cover {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Texto a la derecha */
+
+    .book-card .book-details {
+        grid-column: 2;
+        grid-row: 1;
+        gap: 7px;
+    }
+
+    .book-details h3 {
+        font-size: 21px;
+    }
+
+    .book-card > a {
+        grid-column: 2;
+        justify-self: start;
+        align-self: start;
+        margin-top: 0;
+        padding: 8px 11px;
+        font-size: 11px;
     }
 
     .chat-form {
-        width: calc(100% - 24px);
-        gap: 6px;
+        width: calc(100% - 16px);
+        gap: 5px;
+        padding: 5px 6px 5px 10px;
+    }
+
+    .chat-form input {
+        font-size: 13px;
     }
 
     .chat-form button {
-        padding: 12px;
+        padding: 10px 12px;
+    }
+
+    .disclaimer {
+        padding: 8px 6px 10px;
+    }
+}
+
+/* ==========================================
+   REDUCIR ANIMACIONES
+   ========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
     }
 }

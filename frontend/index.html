@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat IA</title>
+
+    <title>BookMatch | Tu próximo libro</title>
 
     <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -12,52 +13,82 @@
 <body>
     <div class="app">
 
+        <!-- Barra lateral -->
         <aside class="sidebar">
-            <h2>✦ Chat IA</h2>
 
-            <button id="new-chat" class="new-chat">
+            <div class="sidebar-brand">
+                <img
+                    src="img/bookmatch-logo.png"
+                    alt="Logo de BookMatch"
+                >
+            </div>
+
+            <button id="new-chat" class="new-chat" type="button">
                 + Nuevo chat
             </button>
 
-            <p class="sidebar-label">Tus conversaciones</p>
 
             <div id="chat-history"></div>
 
             <div class="sidebar-footer">
                 Proyecto de aprendizaje
             </div>
+
         </aside>
 
+        <!-- Chat principal -->
         <main class="chat">
 
             <header class="chat-header">
-                <div class="avatar">✦</div>
+
+                <img
+                    src="img/bookmatch-logo.png"
+                    alt="Logo de BookMatch"
+                    class="header-logo"
+                >
 
                 <div>
-                    <h1>Asistente IA</h1>
-                    <span class="status">Tu asistente personal</span>
+                    <h1>BookMatch</h1>
+
+                    <span class="status">
+                        Tu próximo capítulo empieza aquí
+                    </span>
                 </div>
+
             </header>
 
+            <!-- Mensajes y bienvenida -->
             <section
                 id="messages"
                 class="messages"
                 aria-live="polite"
                 aria-label="Conversación"
             >
-                <div class="welcome">
-                    <div class="welcome-icon">✦</div>
 
-                    <h2>¿En qué puedo ayudarte?</h2>
+                <div class="welcome">
+
+                    <!-- Imagen del libro cerrado con corazón -->
+                    <div class="welcome-icon">
+                        <img
+                            src="img/libro-corazon.png"
+                            alt="Libro cerrado con un corazón rosa"
+                        >
+                    </div>
+
+                    <h2>¿Qué historia te gustaría descubrir?</h2>
 
                     <p>
-                        Escribí tu pregunta y comencemos
-                        una conversación.
+                        Contame qué te gusta leer y encontremos juntos
+                        tu próximo libro favorito.
                     </p>
+
                 </div>
+
             </section>
 
+            <!-- Formulario del chat -->
             <form id="chat-form" class="chat-form">
+
                 <label class="sr-only" for="message-input">
                     Escribí tu mensaje
                 </label>
@@ -73,6 +104,7 @@
                 <button type="submit" id="send-button">
                     Enviar
                 </button>
+
             </form>
 
             <p class="disclaimer">
@@ -80,8 +112,10 @@
             </p>
 
         </main>
+
     </div>
 
+    <!-- JavaScript del chat -->
     <script src="js/app.js"></script>
 </body>
 </html>
