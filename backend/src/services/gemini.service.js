@@ -1,10 +1,6 @@
 
 let ai;
 
-if (!process.env.GEMINI_API_KEY) {
-    throw new Error("Falta configurar GEMINI_API_KEY en .env");
-}
-
 // Esperar antes de reintentar una petición
 function esperar(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -31,6 +27,13 @@ function esErrorTemporal(error) {
 
 // Inicializar el cliente de Gemini
 async function getAI() {
+    // Verificar la clave cuando realmente se necesita Gemini
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error(
+            "Falta configurar GEMINI_API_KEY en las variables de entorno."
+        );
+    }
+
     if (!ai) {
         const { GoogleGenAI } = await import("@google/genai");
 
@@ -95,7 +98,7 @@ async function generateResponse(message) {
                 }
             });
 
-            // La petición fue exitosa: salir del bucle
+            // La petición fue exitosa
             break;
 
         } catch (error) {
@@ -132,7 +135,9 @@ async function generateResponse(message) {
             typeof resultado.reply !== "string" ||
             !Array.isArray(resultado.books)
         ) {
-            throw new Error("La respuesta no tiene la estructura esperada.");
+            throw new Error(
+                "La respuesta no tiene la estructura esperada."
+            );
         }
 
         // Normalizar los libros para evitar datos incompletos
@@ -154,7 +159,9 @@ async function generateResponse(message) {
             error.message
         );
 
-        throw new Error("Gemini devolvió un formato de respuesta inválido.");
+        throw new Error(
+            "Gemini devolvió un formato de respuesta inválido."
+        );
     }
 }
 
