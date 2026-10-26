@@ -7,16 +7,11 @@ const newChatButton = document.getElementById("new-chat");
 const STORAGE_KEY = "bookmatch_conversations_v1";
 const ACTIVE_CHAT_KEY = "bookmatch_active_chat_v1";
 const BOOK_IMAGE = "img/libro-corazon.png";
-const API_URL = "https://bookmatch-api.vercel.app/api/chat";
+const API_URL = "http://localhost:3000/api/chat";
 
 let conversations = loadConversations();
 let currentChatId = null;
-
-const chatsGeneratingTitle = new Set();
-
-// --------------------------------------------------
-// ALMACENAMIENTO
-// --------------------------------------------------
+let isSending = false;
 
 function loadConversations() {
     try {
@@ -24,12 +19,19 @@ function loadConversations() {
 
         if (!Array.isArray(saved)) return [];
 
-        return saved.filter(
-            chat =>
+        return saved
+            .filter(chat =>
                 chat &&
                 typeof chat.id === "string" &&
                 Array.isArray(chat.messages)
-        );
+            )
+            .map(chat => ({
+                ...chat,
+                title: chat.title || "Nueva conversación",
+                recommendedBooks: Array.isArray(chat.recommendedBooks)
+                    ? chat.recommendedBooks
+                    : []
+            }));
     } catch (error) {
         console.error("No se pudo leer el historial:", error);
         return [];
@@ -38,11 +40,7 @@ function loadConversations() {
 
 function saveConversations() {
     try {
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(conversations)
-        );
-
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
         renderHistory();
     } catch (error) {
         console.error("No se pudo guardar el historial:", error);
@@ -53,43 +51,32 @@ function getCurrentChat() {
     return conversations.find(chat => chat.id === currentChatId);
 }
 
-// --------------------------------------------------
-// CREAR CONVERSACIÓN
-// --------------------------------------------------
-
 function createConversation() {
-    const id =
-        typeof crypto !== "undefined" &&
+    const id = typeof crypto !== "undefined" &&
         typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : Date.now().toString() +
-              Math.random().toString(16).slice(2);
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     const chat = {
         id,
         title: "Nueva conversación",
         createdAt: new Date().toISOString(),
-        messages: []
+        messages: [],
+        recommendedBooks: []
     };
 
     conversations.unshift(chat);
-    currentChatId = chat.id;
+    currentChatId = id;
 
-    localStorage.setItem(ACTIVE_CHAT_KEY, currentChatId);
-
+    localStorage.setItem(ACTIVE_CHAT_KEY, id);
     saveConversations();
     renderConversation(chat);
 
-    if (messageInput) {
-        messageInput.focus();
-    }
-
+    messageInput?.focus();
     return chat;
 }
 
-// --------------------------------------------------
 // HISTORIAL
-// --------------------------------------------------
 
 let historyContainer = document.getElementById("chat-history");
 
@@ -98,11 +85,8 @@ if (!historyContainer) {
     historyContainer.id = "chat-history";
     historyContainer.className = "chat-history";
 
-    if (newChatButton && newChatButton.parentElement) {
-        newChatButton.insertAdjacentElement(
-            "afterend",
-            historyContainer
-        );
+    if (newChatButton?.parentElement) {
+        newChatButton.insertAdjacentElement("afterend", historyContainer);
     } else {
         document.body.prepend(historyContainer);
     }
@@ -116,15 +100,12 @@ function renderHistory() {
     const heading = document.createElement("h3");
     heading.className = "chat-history-title";
     heading.textContent = "Mis conversaciones";
-
     historyContainer.appendChild(heading);
 
     if (conversations.length === 0) {
         const empty = document.createElement("p");
         empty.className = "chat-history-empty";
-        empty.textContent =
-            "Todavía no tenés conversaciones guardadas.";
-
+        empty.textContent = "Todavía no tenés conversaciones guardadas.";
         historyContainer.appendChild(empty);
         return;
     }
@@ -140,19 +121,17 @@ function renderHistory() {
         const openButton = document.createElement("button");
         openButton.type = "button";
         openButton.className = "chat-history-open";
-        openButton.textContent = "💬 " + chat.title;
+        openButton.textContent = `💬 ${chat.title}`;
         openButton.title = chat.title;
 
         openButton.addEventListener("click", () => {
+            if (isSending) return;
+
             currentChatId = chat.id;
-
-            localStorage.setItem(
-                ACTIVE_CHAT_KEY,
-                currentChatId
-            );
-
+            localStorage.setItem(ACTIVE_CHAT_KEY, chat.id);
             renderConversation(chat);
             renderHistory();
+            messageInput?.focus();
         });
 
         const deleteButton = document.createElement("button");
@@ -160,23 +139,14 @@ function renderHistory() {
         deleteButton.className = "chat-history-delete";
         deleteButton.textContent = "🗑️";
         deleteButton.title = "Borrar esta conversación";
-        deleteButton.setAttribute(
-            "aria-label",
-            "Borrar conversación"
-        );
+        deleteButton.setAttribute("aria-label", "Borrar conversación");
 
         deleteButton.addEventListener("click", event => {
             event.stopPropagation();
 
-            if (!confirm(`¿Querés borrar "${chat.title}"?`)) {
-                return;
-            }
+            if (!confirm(`¿Querés borrar "${chat.title}"?`)) return;
 
-            chatsGeneratingTitle.delete(chat.id);
-
-            conversations = conversations.filter(
-                conversation => conversation.id !== chat.id
-            );
+            conversations = conversations.filter(item => item.id !== chat.id);
 
             if (currentChatId === chat.id) {
                 currentChatId = null;
@@ -190,18 +160,15 @@ function renderHistory() {
             }
 
             if (!currentChatId) {
-                currentChatId = conversations[0].id;
-
-                localStorage.setItem(
-                    ACTIVE_CHAT_KEY,
-                    currentChatId
-                );
-
-                renderConversation(conversations[0]);
+                const nextChat = conversations[0];
+                currentChatId = nextChat.id;
+                localStorage.setItem(ACTIVE_CHAT_KEY, nextChat.id);
+                saveConversations();
+                renderConversation(nextChat);
+                return;
             }
 
             saveConversations();
-            renderHistory();
         });
 
         item.append(openButton, deleteButton);
@@ -214,19 +181,14 @@ function renderHistory() {
     deleteAllButton.textContent = "Borrar todo el historial";
 
     deleteAllButton.addEventListener("click", () => {
-        if (!conversations.length) return;
+        if (!conversations.length || isSending) return;
 
-        const confirmed = confirm(
-            "¿Querés borrar todas las conversaciones? " +
-            "Esta acción no se puede deshacer."
-        );
+        if (!confirm(
+            "¿Querés borrar todas las conversaciones? Esta acción no se puede deshacer."
+        )) return;
 
-        if (!confirmed) return;
-
-        chatsGeneratingTitle.clear();
         conversations = [];
         currentChatId = null;
-
         localStorage.removeItem(ACTIVE_CHAT_KEY);
 
         saveConversations();
@@ -236,15 +198,12 @@ function renderHistory() {
     historyContainer.appendChild(deleteAllButton);
 }
 
-// --------------------------------------------------
-// MENSAJES Y BIENVENIDA
-// --------------------------------------------------
+// MENSAJES
 
 function createBookHeartIcon() {
     const image = document.createElement("img");
     image.src = BOOK_IMAGE;
     image.alt = "Libro cerrado con un corazón rosa";
-
     return image;
 }
 
@@ -260,22 +219,18 @@ function showWelcome() {
     iconContainer.appendChild(createBookHeartIcon());
 
     const heading = document.createElement("h2");
-    heading.textContent =
-        "¿Qué historia te gustaría descubrir?";
+    heading.textContent = "¿Qué historia te gustaría descubrir?";
 
     const description = document.createElement("p");
     description.textContent =
-        "Contame qué te gusta leer y encontremos juntos " +
-        "tu próximo libro favorito.";
+        "Contame qué te gusta leer y encontremos juntos tu próximo libro favorito.";
 
     welcome.append(iconContainer, heading, description);
     messagesContainer.appendChild(welcome);
 }
 
 function renderMessage(text, sender) {
-    const welcome = messagesContainer.querySelector(".welcome");
-
-    if (welcome) welcome.remove();
+    messagesContainer.querySelector(".welcome")?.remove();
 
     const message = document.createElement("div");
     message.classList.add("message", sender);
@@ -287,234 +242,133 @@ function renderMessage(text, sender) {
 
 function addMessage(text, sender) {
     renderMessage(text, sender);
-
-    saveEntry({
-        type: "message",
-        text,
-        sender
-    });
+    saveEntry({ type: "message", text, sender });
 }
-
-// --------------------------------------------------
-// GUARDAR MENSAJES
-// --------------------------------------------------
 
 function saveEntry(entry) {
     const chat = getCurrentChat();
-
     if (!chat) return;
 
     chat.messages.push(entry);
     saveConversations();
 }
 
-// --------------------------------------------------
-// CONSTRUIR EL CONTEXTO PARA GEMINI
-// --------------------------------------------------
-
 function getConversationHistory(chat) {
     if (!chat || !Array.isArray(chat.messages)) return [];
 
     return chat.messages
-        .filter(
-            entry =>
-                entry.type === "message" &&
-                typeof entry.text === "string" &&
-                ["user", "assistant"].includes(entry.sender)
+        .filter(entry =>
+            entry.type === "message" &&
+            typeof entry.text === "string" &&
+            ["user", "assistant"].includes(entry.sender)
         )
-        .slice(-12)
+        .slice(-20)
         .map(entry => ({
             role: entry.sender,
             content: entry.text
         }));
 }
 
-// --------------------------------------------------
-// TÍTULOS DE CONVERSACIÓN
-// --------------------------------------------------
+// TÍTULOS: SE FIJAN UNA SOLA VEZ
 
-function createFallbackTitle(messages) {
-    const firstUserMessage = messages.find(
-        message => message.sender === "user"
-    );
-
-    if (!firstUserMessage) return null;
-
-    let title = firstUserMessage.text
-        .replace(/\s+/g, " ")
-        .trim();
-
-    // No generar títulos a partir de saludos aislados.
-    const normalized = title
+function normalizeText(text = "") {
+    return String(text)
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
-        .replace(/[¿?¡!.,]/g, "")
+        .replace(/[¿?¡!.,;:]/g, "")
+        .replace(/\s+/g, " ")
         .trim();
+}
+
+function createFallbackTitle(messages) {
+    const userMessages = messages
+        .filter(message => message.sender === "user")
+        .map(message => message.text.trim())
+        .filter(Boolean);
 
     const greetings = [
-        "hola",
-        "holaa",
-        "holi",
-        "buenas",
-        "buen dia",
-        "buenas tardes",
-        "buenas noches",
-        "gracias",
-        "chau",
-        "adios"
+        "hola", "holaa", "holaaa", "holi", "buenas",
+        "buen dia", "buenas tardes", "buenas noches",
+        "gracias", "muchas gracias", "ok", "okay",
+        "dale", "genial", "perfecto", "chau", "adios",
+        "hasta luego"
     ];
 
-    if (greetings.includes(normalized)) {
-        return null;
-    }
-
-    const words = title.split(/\s+/);
-
-    if (words.length > 6) {
-        title = words.slice(0, 6).join(" ");
-    }
-
-    if (title.length > 45) {
-        title = title.slice(0, 42).trimEnd() + "...";
-    }
-
-    return title.charAt(0).toLocaleUpperCase("es") +
-        title.slice(1);
-}
-
-async function generateContextualTitle(messages) {
-    const conversationText = messages
-        .map(message =>
-            `${message.sender === "user" ? "Usuario" : "BookMatch"}: ${message.text}`
-        )
-        .join("\n");
-
-    try {
-        const response = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                message:
-                    "Creá un título breve para esta conversación. " +
-                    "No recomiendes libros ni saludes. " +
-                    "Respondé solamente con un título de 2 a 6 palabras. " +
-                    "Si solo hay saludos sin tema, respondé SIN_TITULO.\n\n" +
-                    conversationText
-            })
-        });
-
-        if (!response.ok) return null;
-
-        const data = await response.json();
-
-        // La API devuelve un objeto de chat, no texto plano.
-        const rawTitle = String(
-            data.response || data.reply || ""
-        ).trim();
-
-        if (!rawTitle || /SIN_TITULO/i.test(rawTitle)) {
-            return null;
-        }
-
-        const cleanedTitle = rawTitle
-            .replace(/^["'“”]+|["'“”]+$/g, "")
-            .replace(/\s+/g, " ")
-            .trim();
-
-        const words = cleanedTitle.split(/\s+/);
-
-        if (
-            !cleanedTitle ||
-            words.length > 8 ||
-            cleanedTitle.length > 70
-        ) {
-            return null;
-        }
-
-        return cleanedTitle;
-    } catch (error) {
-        console.error(
-            "Error generando título contextual:",
-            error
-        );
-
-        return null;
-    }
-}
-
-async function updateContextualTitle(chatId) {
-    const chat = conversations.find(
-        item => item.id === chatId
+    const meaningful = userMessages.filter(
+        message => !greetings.includes(normalizeText(message))
     );
+
+    if (!meaningful.length) return null;
+
+    const text = normalizeText(meaningful.join(" "));
+    let title = null;
+
+    if (/sarah j maas/.test(text)) {
+        title = "Libros de Sarah J. Maas";
+    } else if (/colleen hoover/.test(text)) {
+        title = "Libros de Colleen Hoover";
+    } else if (/harry potter|jk rowling|j k rowling/.test(text)) {
+        title = "Libros de Harry Potter";
+    } else if (/rick riordan|percy jackson/.test(text)) {
+        title = "Libros de Percy Jackson";
+    } else if (/stephen king/.test(text)) {
+        title = "Libros de Stephen King";
+    } else if (/jane austen/.test(text)) {
+        title = "Libros de Jane Austen";
+    } else if (/fantasia romantica|romantasy|romance fantastico/.test(text)) {
+        title = "Recomendaciones de fantasía romántica";
+    } else if (/fantasia|fantastico|magia|dragones|brujas|hechizos/.test(text)) {
+        title = "Recomendaciones de fantasía";
+    } else if (/romance|romantico|romantica|historias de amor/.test(text)) {
+        title = "Recomendaciones de romance";
+    } else if (/misterio|detectives|investigacion/.test(text)) {
+        title = "Recomendaciones de misterio";
+    } else if (/terror|miedo|horror/.test(text)) {
+        title = "Recomendaciones de terror";
+    } else if (/suspenso|thriller|crimen/.test(text)) {
+        title = "Libros de suspenso y misterio";
+    } else if (/ciencia ficcion|distopia|distopico|espacio/.test(text)) {
+        title = "Recomendaciones de ciencia ficción";
+    } else if (/juvenil|young adult|adolescentes/.test(text)) {
+        title = "Recomendaciones de literatura juvenil";
+    } else if (/clasicos|literatura clasica/.test(text)) {
+        title = "Recomendaciones de clásicos";
+    } else if (/poesia|poemas/.test(text)) {
+        title = "Recomendaciones de poesía";
+    }
+
+    if (!title) {
+        title = meaningful[0].replace(/\s+/g, " ").trim();
+
+        const words = title.split(/\s+/);
+        if (words.length > 7) title = words.slice(0, 7).join(" ");
+        if (title.length > 48) title = title.slice(0, 45).trimEnd() + "...";
+
+        title = title.charAt(0).toLocaleUpperCase("es") + title.slice(1);
+    }
+
+    return title;
+}
+
+function updateContextualTitle(chatId) {
+    const chat = conversations.find(item => item.id === chatId);
 
     if (!chat || chat.title !== "Nueva conversación") return;
 
-    if (chatsGeneratingTitle.has(chatId)) return;
-
-    const messagesSnapshot = chat.messages
-        .filter(entry => entry.type === "message")
-        .map(entry => ({
-            sender: entry.sender,
-            text: entry.text
-        }));
-
-    const userMessages = messagesSnapshot.filter(
-        message => message.sender === "user"
+    const title = createFallbackTitle(
+        chat.messages
+            .filter(entry => entry.type === "message")
+            .map(entry => ({ sender: entry.sender, text: entry.text }))
     );
 
-    if (userMessages.length === 0) return;
-
-    chatsGeneratingTitle.add(chatId);
-
-    try {
-        // Primero intentamos obtener un título contextual.
-        let title = await generateContextualTitle(messagesSnapshot);
-
-        // Si Gemini no devuelve un título útil, usamos el primer mensaje.
-        if (!title) {
-            title = createFallbackTitle(messagesSnapshot);
-        }
-
-        const latestChat = conversations.find(
-            item => item.id === chatId
-        );
-
-        if (
-            title &&
-            latestChat &&
-            latestChat.title === "Nueva conversación"
-        ) {
-            latestChat.title = title;
-            saveConversations();
-        }
-    } finally {
-        chatsGeneratingTitle.delete(chatId);
+    if (title) {
+        chat.title = title;
+        saveConversations();
     }
 }
 
-// --------------------------------------------------
-// PORTADAS DE LIBROS
-// --------------------------------------------------
-
-function createBookPlaceholder() {
-    const placeholder = document.createElement("div");
-    placeholder.className = "book-no-cover";
-
-    const image = createBookHeartIcon();
-    image.alt = "";
-
-    placeholder.appendChild(image);
-    placeholder.setAttribute("role", "img");
-    placeholder.setAttribute(
-        "aria-label",
-        "Portada de libro no disponible"
-    );
-
-    return placeholder;
-}
+// PORTADAS ALTERNATIVAS
 
 async function findAlternativeCover(book) {
     try {
@@ -524,9 +378,7 @@ async function findAlternativeCover(book) {
             fields: "cover_i,title,author_name"
         });
 
-        if (book.author) {
-            params.set("author", book.author);
-        }
+        if (book.author) params.set("author", book.author);
 
         const response = await fetch(
             `https://openlibrary.org/search.json?${params.toString()}`
@@ -537,25 +389,21 @@ async function findAlternativeCover(book) {
         const data = await response.json();
         const docs = data.docs || [];
 
-        const normalizeText = value =>
+        const normalize = value =>
             (value || "")
                 .normalize("NFD")
                 .replace(/[\u0300-\u036f]/g, "")
                 .toLowerCase()
                 .replace(/[^a-z0-9]/g, "");
 
-        const wantedTitle = normalizeText(book.title);
-        const wantedAuthor = normalizeText(book.author);
+        const wantedTitle = normalize(book.title);
+        const wantedAuthor = normalize(book.author);
 
         const matchingBook = docs.find(item => {
-            const titleMatches =
-                normalizeText(item.title) === wantedTitle;
+            const titleMatches = normalize(item.title) === wantedTitle;
+            const authors = (item.author_name || []).map(normalize);
 
-            const authors = (item.author_name || [])
-                .map(normalizeText);
-
-            const authorMatches =
-                !wantedAuthor ||
+            const authorMatches = !wantedAuthor ||
                 authors.some(author =>
                     author.includes(wantedAuthor) ||
                     wantedAuthor.includes(author)
@@ -564,32 +412,35 @@ async function findAlternativeCover(book) {
             return titleMatches && authorMatches && item.cover_i;
         });
 
-        const alternativeBook =
-            matchingBook ||
+        const alternativeBook = matchingBook ||
             docs.find(item =>
-                normalizeText(item.title) === wantedTitle &&
-                item.cover_i
+                normalize(item.title) === wantedTitle && item.cover_i
             );
 
-        if (!alternativeBook) return null;
-
-        return (
-            `https://covers.openlibrary.org/b/id/` +
-            `${alternativeBook.cover_i}-M.jpg`
-        );
+        return alternativeBook
+            ? `https://covers.openlibrary.org/b/id/${alternativeBook.cover_i}-M.jpg`
+            : null;
     } catch (error) {
-        console.error(
-            "Error buscando portada alternativa:",
-            error
-        );
-
+        console.error("Error buscando portada alternativa:", error);
         return null;
     }
 }
 
-// --------------------------------------------------
 // TARJETAS DE LIBROS
-// --------------------------------------------------
+
+function createBookPlaceholder() {
+    const placeholder = document.createElement("div");
+    placeholder.className = "book-no-cover";
+
+    const image = createBookHeartIcon();
+    image.alt = "";
+
+    placeholder.appendChild(image);
+    placeholder.setAttribute("role", "img");
+    placeholder.setAttribute("aria-label", "Portada de libro no disponible");
+
+    return placeholder;
+}
 
 function renderBookCards(books) {
     if (!Array.isArray(books) || books.length === 0) return;
@@ -613,10 +464,7 @@ function renderBookCards(books) {
 
         function showPlaceholder() {
             if (!coverContainer.isConnected) return;
-
-            coverContainer.replaceChildren(
-                createBookPlaceholder()
-            );
+            coverContainer.replaceChildren(createBookPlaceholder());
         }
 
         image.onerror = async () => {
@@ -627,9 +475,7 @@ function renderBookCards(books) {
             }
 
             triedAlternative = true;
-
-            const alternativeCover =
-                await findAlternativeCover(book);
+            const alternativeCover = await findAlternativeCover(book);
 
             if (alternativeCover && image.isConnected) {
                 image.src = alternativeCover;
@@ -661,13 +507,11 @@ function renderBookCards(books) {
         details.className = "book-details";
 
         const title = document.createElement("h3");
-        title.textContent =
-            book.title || "Título no disponible";
+        title.textContent = book.title || "Título no disponible";
 
         const author = document.createElement("p");
         author.className = "book-author";
-        author.textContent =
-            book.author || "Autor no disponible";
+        author.textContent = book.author || "Autor no disponible";
 
         const genre = document.createElement("span");
         genre.className = "book-genre";
@@ -681,14 +525,7 @@ function renderBookCards(books) {
         reason.className = "book-reason";
         reason.textContent = book.reason || "";
 
-        details.append(
-            title,
-            author,
-            genre,
-            description,
-            reason
-        );
-
+        details.append(title, author, genre, description, reason);
         card.append(coverContainer, details);
 
         if (book.previewLink) {
@@ -697,7 +534,6 @@ function renderBookCards(books) {
             link.target = "_blank";
             link.rel = "noopener noreferrer";
             link.textContent = "Ver libro";
-
             card.appendChild(link);
         }
 
@@ -711,26 +547,49 @@ function renderBookCards(books) {
 function addBookCards(books) {
     if (!Array.isArray(books) || books.length === 0) return;
 
-    saveEntry({
-        type: "books",
-        books
+    const chat = getCurrentChat();
+    if (!chat) return;
+
+    const seen = new Set(
+        (chat.recommendedBooks || []).map(book =>
+            normalizeText(book.title).replace(/[^a-z0-9]/g, "")
+        )
+    );
+
+    const uniqueBooks = books.filter(book => {
+        const title = normalizeText(book.title).replace(/[^a-z0-9]/g, "");
+
+        if (!title || seen.has(title)) return false;
+
+        seen.add(title);
+        return true;
     });
 
-    renderBookCards(books);
+    if (!uniqueBooks.length) return;
+
+    chat.recommendedBooks = [
+        ...(chat.recommendedBooks || []),
+        ...uniqueBooks.map(book => ({
+            title: book.title,
+            author: book.author
+        }))
+    ];
+
+    chat.messages.push({
+        type: "books",
+        books: uniqueBooks
+    });
+
+    saveConversations();
+    renderBookCards(uniqueBooks);
 }
 
-// --------------------------------------------------
 // RECUPERAR CONVERSACIÓN
-// --------------------------------------------------
 
 function renderConversation(chat) {
     messagesContainer.innerHTML = "";
 
-    if (
-        !chat ||
-        !Array.isArray(chat.messages) ||
-        chat.messages.length === 0
-    ) {
+    if (!chat || !Array.isArray(chat.messages) || chat.messages.length === 0) {
         showWelcome();
         return;
     }
@@ -746,30 +605,22 @@ function renderConversation(chat) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// --------------------------------------------------
-// ENVIAR MENSAJES AL BACKEND
-// --------------------------------------------------
+// ENVIAR MENSAJES
 
 async function sendMessage(message, chatId) {
     try {
-        const chat = conversations.find(
-            item => item.id === chatId
-        );
-
+        const chat = conversations.find(item => item.id === chatId);
         if (!chat) return;
 
-        // Enviar los mensajes anteriores, sin duplicar el actual.
-        const conversationHistory = getConversationHistory(chat)
-            .slice(0, -1);
+        const conversationHistory = getConversationHistory(chat).slice(0, -1);
 
         const response = await fetch(API_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 message,
-                conversationHistory
+                conversationHistory,
+                excludedBooks: chat.recommendedBooks || []
             })
         });
 
@@ -778,39 +629,26 @@ async function sendMessage(message, chatId) {
         try {
             data = await response.json();
         } catch {
-            throw new Error(
-                "El servidor devolvió una respuesta inválida."
-            );
+            throw new Error("El servidor devolvió una respuesta inválida.");
         }
 
         console.log("Respuesta del backend:", data);
 
         if (!response.ok) {
-            throw new Error(
-                data.message || "Error al consultar el servidor."
-            );
+            throw new Error(data.message || "Error al consultar el servidor.");
         }
 
-        const reply =
-            data.response || data.reply || data.message;
-
-        // Si se cambió de conversación, no mostrar la respuesta en otra.
         if (currentChatId !== chatId) return;
 
-        if (reply) {
-            addMessage(reply, "assistant");
-        }
+        const reply = data.response || data.reply || data.message;
+
+        if (reply) addMessage(reply, "assistant");
 
         if (Array.isArray(data.books)) {
             addBookCards(data.books);
         }
-
-        await updateContextualTitle(chatId);
     } catch (error) {
-        console.error(
-            "Error al comunicarse con BookMatch:",
-            error
-        );
+        console.error("Error al comunicarse con BookMatch:", error);
 
         if (currentChatId === chatId) {
             addMessage(
@@ -821,78 +659,76 @@ async function sendMessage(message, chatId) {
     }
 }
 
-// --------------------------------------------------
 // EVENTOS
-// --------------------------------------------------
 
 chatForm.addEventListener("submit", async event => {
     event.preventDefault();
 
-    const text = messageInput.value.trim();
+    if (isSending) return;
 
+    const text = messageInput.value.trim();
     if (!text) return;
 
-    if (!getCurrentChat()) {
-        createConversation();
-    }
+    if (!getCurrentChat()) createConversation();
 
     const chatId = currentChatId;
-    const chat = conversations.find(
-        item => item.id === chatId
-    );
-
+    const chat = conversations.find(item => item.id === chatId);
     if (!chat) return;
 
-    chat.messages.push({
-        type: "message",
-        text,
-        sender: "user"
-    });
+    isSending = true;
+    messageInput.disabled = true;
 
-    saveConversations();
-    renderMessage(text, "user");
+    try {
+        chat.messages.push({
+            type: "message",
+            text,
+            sender: "user"
+        });
 
-    messageInput.value = "";
-    messageInput.focus();
+        saveConversations();
+        renderMessage(text, "user");
+        messageInput.value = "";
 
-    await sendMessage(text, chatId);
+        updateContextualTitle(chatId);
+        await sendMessage(text, chatId);
+    } finally {
+        isSending = false;
+        messageInput.disabled = false;
+
+        if (currentChatId === chatId) {
+            messageInput.focus();
+        }
+    }
 });
 
 newChatButton.addEventListener("click", () => {
+    if (isSending) return;
     createConversation();
 });
 
-// --------------------------------------------------
-// INICIAR BOOKMATCH
-// --------------------------------------------------
+// INICIO: NUEVA CONVERSACIÓN AL ENTRAR, CONSERVARLA AL RECARGAR
+
+const VISIT_CHAT_KEY = "bookmatch_visit_chat_v1";
 
 function initializeBookMatch() {
-    const savedActiveChatId =
-        localStorage.getItem(ACTIVE_CHAT_KEY);
+    const visitChatId = sessionStorage.getItem(VISIT_CHAT_KEY);
 
-    let activeChat = conversations.find(
-        chat => chat.id === savedActiveChatId
-    );
+    let activeChat = visitChatId
+        ? conversations.find(chat => chat.id === visitChatId)
+        : null;
 
-    // Si el chat activo no existe, recuperar el más reciente.
-    if (!activeChat && conversations.length > 0) {
-        activeChat = conversations[0];
-    }
-
-    // Crear conversación solamente si no hay ninguna guardada.
-    if (!activeChat) {
+    if (activeChat) {
+        // Es la misma pestaña y la misma visita: restaurar el chat.
+        currentChatId = activeChat.id;
+        localStorage.setItem(ACTIVE_CHAT_KEY, currentChatId);
+        renderConversation(activeChat);
+    } else {
+        // Es una visita nueva o el chat de esta visita ya no existe.
         createConversation();
-        return;
+
+        sessionStorage.setItem(VISIT_CHAT_KEY, currentChatId);
     }
 
-    currentChatId = activeChat.id;
-
-    localStorage.setItem(
-        ACTIVE_CHAT_KEY,
-        currentChatId
-    );
-
-    renderConversation(activeChat);
     renderHistory();
 }
 

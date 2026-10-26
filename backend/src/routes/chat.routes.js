@@ -1,5 +1,6 @@
 
 const express = require("express");
+
 const {
     generateResponse,
     listModels
@@ -7,41 +8,31 @@ const {
 
 const router = express.Router();
 
-// Normalizar texto para comparar títulos y autores.
 function normalize(text = "") {
     return String(text)
-        .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9 ]/g, "")
-        .trim();
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
 }
 
-// Buscar la portada de un libro en Open Library.
 async function findBookCover(book) {
     try {
         const title = (book.title || "").trim();
         const author = (book.author || "").trim();
 
         if (!title) {
-            return {
-                ...book,
-                cover: null,
-                previewLink: null
-            };
+            return { ...book, cover: null, previewLink: null };
         }
 
         const query = `${title} ${author}`;
-
         const url =
             `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10`;
 
         const response = await fetch(url);
 
         if (!response.ok) {
-            throw new Error(
-                `Open Library respondió ${response.status}`
-            );
+            throw new Error(`Open Library respondió ${response.status}`);
         }
 
         const data = await response.json();
@@ -50,8 +41,7 @@ async function findBookCover(book) {
         const wantedTitle = normalize(title);
         const wantedAuthor = normalize(author);
 
-        // Buscar coincidencia por título y autor.
-        let match = results.find((item) => {
+        let match = results.find(item => {
             const foundTitle = normalize(item.title);
             const authors = (item.author_name || []).map(normalize);
 
@@ -62,7 +52,7 @@ async function findBookCover(book) {
 
             const authorMatches =
                 !wantedAuthor ||
-                authors.some((name) =>
+                authors.some(name =>
                     name.includes(wantedAuthor) ||
                     wantedAuthor.includes(name)
                 );
@@ -70,9 +60,8 @@ async function findBookCover(book) {
             return titleMatches && authorMatches && item.cover_i;
         });
 
-        // Si no hay coincidencia, buscar por título.
         if (!match) {
-            match = results.find((item) => {
+            match = results.find(item => {
                 const foundTitle = normalize(item.title);
 
                 return (
@@ -86,18 +75,14 @@ async function findBookCover(book) {
             });
         }
 
-        const cover = match?.cover_i
-            ? `https://covers.openlibrary.org/b/id/${match.cover_i}-L.jpg`
-            : null;
-
-        const previewLink = match?.key
-            ? `https://openlibrary.org${match.key}`
-            : null;
-
         return {
             ...book,
-            cover,
-            previewLink
+            cover: match?.cover_i
+                ? `https://covers.openlibrary.org/b/id/${match.cover_i}-L.jpg`
+                : null,
+            previewLink: match?.key
+                ? `https://openlibrary.org${match.key}`
+                : null
         };
     } catch (error) {
         console.error(
@@ -105,80 +90,91 @@ async function findBookCover(book) {
             error.message
         );
 
-        return {
-            ...book,
-            cover: null,
-            previewLink: null
-        };
+        return { ...book, cover: null, previewLink: null };
     }
 }
 
-// Endpoint principal del chat.
 router.post("/", async (req, res) => {
     try {
-        const { message, conversationHistory = [] } = req.body;
+        const {
+            message,
+            conversationHistory = [],
+            excludedBooks = []
+        } = req.body;
 
-        if (
-            typeof message !== "string" ||
-            !message.trim()
-        ) {
+        if (typeof message !== "string" || !message.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "El mensaje no puede estar vacío."
             });
         }
 
-        // Validar y limitar el historial recibido.
         const history = Array.isArray(conversationHistory)
             ? conversationHistory
-                .filter((item) =>
+                .filter(item =>
                     item &&
                     typeof item.content === "string" &&
                     ["user", "assistant"].includes(item.role)
                 )
-                .slice(-12)
-                .map((item) => ({
+                .slice(-20)
+                .map(item => ({
                     role: item.role,
                     content: item.content.slice(0, 3000)
                 }))
             : [];
 
-        // Enviar el mensaje y el historial a Gemini.
-        const result = await generateResponse(
-            message.trim(),
-            history
-        );
-
-        const recommendations = Array.isArray(result.books)
-            ? result.books
+        const excluded = Array.isArray(excludedBooks)
+            ? excludedBooks
+                .filter(book => book && typeof book.title === "string")
+                .slice(0, 500)
+                .map(book => ({
+                    title: book.title,
+                    author: String(book.author || "")
+                }))
             : [];
 
-        // Buscar las portadas de los libros recomendados.
+        const result = await generateResponse(
+            message.trim(),
+            history,
+            excluded
+        );
+
+        const excludedTitles = new Set(
+            excluded.map(book => normalize(book.title))
+        );
+
+        const seenTitles = new Set(excludedTitles);
+
+        const recommendations = (Array.isArray(result.books) ? result.books : [])
+            .filter(book => {
+                const title = normalize(book.title);
+
+                if (!title || seenTitles.has(title)) {
+                    return false;
+                }
+
+                seenTitles.add(title);
+                return true;
+            })
+            .slice(0, 5);
+
         const books = await Promise.all(
             recommendations.map(findBookCover)
         );
 
-        console.log(
-            `BookMatch: ${books.length} libros recomendados.`
-        );
-
+        console.log(`BookMatch: ${books.length} libros recomendados.`);
         console.log(
             "Portadas encontradas:",
-            books.filter((book) => book.cover).length
+            books.filter(book => book.cover).length
         );
 
         return res.json({
             success: true,
-            response:
-                result.reply ||
-                "Estas son algunas recomendaciones para vos.",
+            response: result.reply || "Estas son algunas recomendaciones para vos.",
             books
         });
     } catch (error) {
-        console.error(
-            "Error al consultar Gemini:",
-            error.message
-        );
+        console.error("Error al consultar Groq:", error.message);
 
         return res.status(500).json({
             success: false,
@@ -187,7 +183,6 @@ router.post("/", async (req, res) => {
     }
 });
 
-// Endpoint para consultar los modelos disponibles.
 router.get("/models", async (req, res) => {
     try {
         await listModels();
@@ -197,10 +192,7 @@ router.get("/models", async (req, res) => {
             message: "Modelos mostrados en la consola."
         });
     } catch (error) {
-        console.error(
-            "Error al listar modelos:",
-            error.message
-        );
+        console.error("Error al listar modelos:", error.message);
 
         return res.status(500).json({
             success: false,
