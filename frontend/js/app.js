@@ -7,7 +7,7 @@ const newChatButton = document.getElementById("new-chat");
 const STORAGE_KEY = "bookmatch_conversations_v1";
 const ACTIVE_CHAT_KEY = "bookmatch_active_chat_v1";
 const BOOK_IMAGE = "img/libro-corazon.png";
-const API_URL = "http://localhost:3000/api/chat";
+const API_URL = "https://bookmatch-api.vercel.app/api/chat";
 
 let conversations = loadConversations();
 let currentChatId = null;
