@@ -4,7 +4,7 @@ const express = require("express");
 const {
     generateResponse,
     listModels
-} = require("../services/gemini.service");
+} = require("../services/groq.service");
 
 const router = express.Router();
 
