@@ -50,7 +50,7 @@ async function findBookCover(book) {
         const wantedTitle = normalize(title);
         const wantedAuthor = normalize(author);
 
-        // Buscar primero una coincidencia por título y autor.
+        // Buscar coincidencia por título y autor.
         let match = results.find((item) => {
             const foundTitle = normalize(item.title);
             const authors = (item.author_name || []).map(normalize);
@@ -70,7 +70,7 @@ async function findBookCover(book) {
             return titleMatches && authorMatches && item.cover_i;
         });
 
-        // Si no hay coincidencia exacta, buscar por título.
+        // Si no hay coincidencia, buscar por título.
         if (!match) {
             match = results.find((item) => {
                 const foundTitle = normalize(item.title);
@@ -86,7 +86,6 @@ async function findBookCover(book) {
             });
         }
 
-        // Si encontramos una portada, construir su URL.
         const cover = match?.cover_i
             ? `https://covers.openlibrary.org/b/id/${match.cover_i}-L.jpg`
             : null;
@@ -117,10 +116,9 @@ async function findBookCover(book) {
 // Endpoint principal del chat.
 router.post("/", async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, conversationHistory = [] } = req.body;
 
         if (
-            !message ||
             typeof message !== "string" ||
             !message.trim()
         ) {
@@ -130,20 +128,36 @@ router.post("/", async (req, res) => {
             });
         }
 
-        // Obtener respuesta de Gemini.
-        const result = await generateResponse(message);
+        // Validar y limitar el historial recibido.
+        const history = Array.isArray(conversationHistory)
+            ? conversationHistory
+                .filter((item) =>
+                    item &&
+                    typeof item.content === "string" &&
+                    ["user", "assistant"].includes(item.role)
+                )
+                .slice(-12)
+                .map((item) => ({
+                    role: item.role,
+                    content: item.content.slice(0, 3000)
+                }))
+            : [];
 
-        // Asegurarnos de recibir una lista de libros.
+        // Enviar el mensaje y el historial a Gemini.
+        const result = await generateResponse(
+            message.trim(),
+            history
+        );
+
         const recommendations = Array.isArray(result.books)
             ? result.books
             : [];
 
-        // Buscar las portadas.
+        // Buscar las portadas de los libros recomendados.
         const books = await Promise.all(
             recommendations.map(findBookCover)
         );
 
-        // Información para diagnosticar problemas.
         console.log(
             `BookMatch: ${books.length} libros recomendados.`
         );

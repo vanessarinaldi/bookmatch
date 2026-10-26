@@ -12,7 +12,6 @@ const API_URL = "https://bookmatch-api.vercel.app/api/chat";
 let conversations = loadConversations();
 let currentChatId = null;
 
-// Evitar generar varios títulos simultáneamente para el mismo chat.
 const chatsGeneratingTitle = new Set();
 
 // --------------------------------------------------
@@ -22,7 +21,15 @@ const chatsGeneratingTitle = new Set();
 function loadConversations() {
     try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        return Array.isArray(saved) ? saved : [];
+
+        if (!Array.isArray(saved)) return [];
+
+        return saved.filter(
+            chat =>
+                chat &&
+                typeof chat.id === "string" &&
+                Array.isArray(chat.messages)
+        );
     } catch (error) {
         console.error("No se pudo leer el historial:", error);
         return [];
@@ -35,6 +42,7 @@ function saveConversations() {
             STORAGE_KEY,
             JSON.stringify(conversations)
         );
+
         renderHistory();
     } catch (error) {
         console.error("No se pudo guardar el historial:", error);
@@ -54,7 +62,8 @@ function createConversation() {
         typeof crypto !== "undefined" &&
         typeof crypto.randomUUID === "function"
             ? crypto.randomUUID()
-            : Date.now().toString() + Math.random().toString(16).slice(2);
+            : Date.now().toString() +
+              Math.random().toString(16).slice(2);
 
     const chat = {
         id,
@@ -113,7 +122,9 @@ function renderHistory() {
     if (conversations.length === 0) {
         const empty = document.createElement("p");
         empty.className = "chat-history-empty";
-        empty.textContent = "Todavía no tenés conversaciones guardadas.";
+        empty.textContent =
+            "Todavía no tenés conversaciones guardadas.";
+
         historyContainer.appendChild(empty);
         return;
     }
@@ -135,7 +146,10 @@ function renderHistory() {
         openButton.addEventListener("click", () => {
             currentChatId = chat.id;
 
-            localStorage.setItem(ACTIVE_CHAT_KEY, currentChatId);
+            localStorage.setItem(
+                ACTIVE_CHAT_KEY,
+                currentChatId
+            );
 
             renderConversation(chat);
             renderHistory();
@@ -146,12 +160,17 @@ function renderHistory() {
         deleteButton.className = "chat-history-delete";
         deleteButton.textContent = "🗑️";
         deleteButton.title = "Borrar esta conversación";
-        deleteButton.setAttribute("aria-label", "Borrar conversación");
+        deleteButton.setAttribute(
+            "aria-label",
+            "Borrar conversación"
+        );
 
         deleteButton.addEventListener("click", event => {
             event.stopPropagation();
 
-            if (!confirm(`¿Querés borrar "${chat.title}"?`)) return;
+            if (!confirm(`¿Querés borrar "${chat.title}"?`)) {
+                return;
+            }
 
             chatsGeneratingTitle.delete(chat.id);
 
@@ -173,7 +192,11 @@ function renderHistory() {
             if (!currentChatId) {
                 currentChatId = conversations[0].id;
 
-                localStorage.setItem(ACTIVE_CHAT_KEY, currentChatId);
+                localStorage.setItem(
+                    ACTIVE_CHAT_KEY,
+                    currentChatId
+                );
+
                 renderConversation(conversations[0]);
             }
 
@@ -193,11 +216,12 @@ function renderHistory() {
     deleteAllButton.addEventListener("click", () => {
         if (!conversations.length) return;
 
-        if (!confirm(
-            "¿Querés borrar todas las conversaciones? Esta acción no se puede deshacer."
-        )) {
-            return;
-        }
+        const confirmed = confirm(
+            "¿Querés borrar todas las conversaciones? " +
+            "Esta acción no se puede deshacer."
+        );
+
+        if (!confirmed) return;
 
         chatsGeneratingTitle.clear();
         conversations = [];
@@ -220,6 +244,7 @@ function createBookHeartIcon() {
     const image = document.createElement("img");
     image.src = BOOK_IMAGE;
     image.alt = "Libro cerrado con un corazón rosa";
+
     return image;
 }
 
@@ -235,11 +260,13 @@ function showWelcome() {
     iconContainer.appendChild(createBookHeartIcon());
 
     const heading = document.createElement("h2");
-    heading.textContent = "¿Qué historia te gustaría descubrir?";
+    heading.textContent =
+        "¿Qué historia te gustaría descubrir?";
 
     const description = document.createElement("p");
     description.textContent =
-        "Contame qué te gusta leer y encontremos juntos tu próximo libro favorito.";
+        "Contame qué te gusta leer y encontremos juntos " +
+        "tu próximo libro favorito.";
 
     welcome.append(iconContainer, heading, description);
     messagesContainer.appendChild(welcome);
@@ -274,6 +301,7 @@ function addMessage(text, sender) {
 
 function saveEntry(entry) {
     const chat = getCurrentChat();
+
     if (!chat) return;
 
     chat.messages.push(entry);
@@ -281,8 +309,79 @@ function saveEntry(entry) {
 }
 
 // --------------------------------------------------
-// GENERAR TÍTULO CON CONTEXTO USANDO GEMINI
+// CONSTRUIR EL CONTEXTO PARA GEMINI
 // --------------------------------------------------
+
+function getConversationHistory(chat) {
+    if (!chat || !Array.isArray(chat.messages)) return [];
+
+    return chat.messages
+        .filter(
+            entry =>
+                entry.type === "message" &&
+                typeof entry.text === "string" &&
+                ["user", "assistant"].includes(entry.sender)
+        )
+        .slice(-12)
+        .map(entry => ({
+            role: entry.sender,
+            content: entry.text
+        }));
+}
+
+// --------------------------------------------------
+// TÍTULOS DE CONVERSACIÓN
+// --------------------------------------------------
+
+function createFallbackTitle(messages) {
+    const firstUserMessage = messages.find(
+        message => message.sender === "user"
+    );
+
+    if (!firstUserMessage) return null;
+
+    let title = firstUserMessage.text
+        .replace(/\s+/g, " ")
+        .trim();
+
+    // No generar títulos a partir de saludos aislados.
+    const normalized = title
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[¿?¡!.,]/g, "")
+        .trim();
+
+    const greetings = [
+        "hola",
+        "holaa",
+        "holi",
+        "buenas",
+        "buen dia",
+        "buenas tardes",
+        "buenas noches",
+        "gracias",
+        "chau",
+        "adios"
+    ];
+
+    if (greetings.includes(normalized)) {
+        return null;
+    }
+
+    const words = title.split(/\s+/);
+
+    if (words.length > 6) {
+        title = words.slice(0, 6).join(" ");
+    }
+
+    if (title.length > 45) {
+        title = title.slice(0, 42).trimEnd() + "...";
+    }
+
+    return title.charAt(0).toLocaleUpperCase("es") +
+        title.slice(1);
+}
 
 async function generateContextualTitle(messages) {
     const conversationText = messages
@@ -298,33 +397,29 @@ async function generateContextualTitle(messages) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                message: `Tu tarea es crear un título breve para una conversación.
-
-Analizá el contexto completo:
-${conversationText}
-
-Reglas:
-- Si solo hay saludos, despedidas o charla social sin un tema claro, respondé exactamente SIN_TITULO.
-- Si el usuario todavía está explorando y no se entiende el tema, respondé SIN_TITULO.
-- Cuando se entienda el tema principal, proponé un título de 2 a 6 palabras.
-- El título debe representar lo que el usuario realmente quiere conversar.
-- Tené en cuenta los mensajes anteriores, no solo el último.
-- Escribí en español.
-- No uses comillas, emojis ni explicaciones.
-- Respondé únicamente con el título o SIN_TITULO.`
+                message:
+                    "Creá un título breve para esta conversación. " +
+                    "No recomiendes libros ni saludes. " +
+                    "Respondé solamente con un título de 2 a 6 palabras. " +
+                    "Si solo hay saludos sin tema, respondé SIN_TITULO.\n\n" +
+                    conversationText
             })
         });
 
         if (!response.ok) return null;
 
         const data = await response.json();
-        const title = String(data.response || data.reply || "").trim();
 
-        if (!title || /SIN_TITULO/i.test(title)) {
+        // La API devuelve un objeto de chat, no texto plano.
+        const rawTitle = String(
+            data.response || data.reply || ""
+        ).trim();
+
+        if (!rawTitle || /SIN_TITULO/i.test(rawTitle)) {
             return null;
         }
 
-        const cleanedTitle = title
+        const cleanedTitle = rawTitle
             .replace(/^["'“”]+|["'“”]+$/g, "")
             .replace(/\s+/g, " ")
             .trim();
@@ -341,30 +436,24 @@ Reglas:
 
         return cleanedTitle;
     } catch (error) {
-        console.error("Error generando título contextual:", error);
+        console.error(
+            "Error generando título contextual:",
+            error
+        );
+
         return null;
     }
 }
 
 async function updateContextualTitle(chatId) {
-    const chat = conversations.find(item => item.id === chatId);
+    const chat = conversations.find(
+        item => item.id === chatId
+    );
 
     if (!chat || chat.title !== "Nueva conversación") return;
 
-    const userMessages = chat.messages.filter(
-        entry =>
-            entry.type === "message" &&
-            entry.sender === "user"
-    );
-
-    // No decidir el título a partir de un único mensaje.
-    if (userMessages.length < 2) return;
-
     if (chatsGeneratingTitle.has(chatId)) return;
 
-    chatsGeneratingTitle.add(chatId);
-
-    // Copiar el historial para analizar un contexto consistente.
     const messagesSnapshot = chat.messages
         .filter(entry => entry.type === "message")
         .map(entry => ({
@@ -372,8 +461,22 @@ async function updateContextualTitle(chatId) {
             text: entry.text
         }));
 
+    const userMessages = messagesSnapshot.filter(
+        message => message.sender === "user"
+    );
+
+    if (userMessages.length === 0) return;
+
+    chatsGeneratingTitle.add(chatId);
+
     try {
-        const title = await generateContextualTitle(messagesSnapshot);
+        // Primero intentamos obtener un título contextual.
+        let title = await generateContextualTitle(messagesSnapshot);
+
+        // Si Gemini no devuelve un título útil, usamos el primer mensaje.
+        if (!title) {
+            title = createFallbackTitle(messagesSnapshot);
+        }
 
         const latestChat = conversations.find(
             item => item.id === chatId
@@ -434,21 +537,22 @@ async function findAlternativeCover(book) {
         const data = await response.json();
         const docs = data.docs || [];
 
-        const normalize = value =>
+        const normalizeText = value =>
             (value || "")
                 .normalize("NFD")
                 .replace(/[\u0300-\u036f]/g, "")
                 .toLowerCase()
                 .replace(/[^a-z0-9]/g, "");
 
-        const wantedTitle = normalize(book.title);
-        const wantedAuthor = normalize(book.author);
+        const wantedTitle = normalizeText(book.title);
+        const wantedAuthor = normalizeText(book.author);
 
         const matchingBook = docs.find(item => {
             const titleMatches =
-                normalize(item.title) === wantedTitle;
+                normalizeText(item.title) === wantedTitle;
 
-            const authors = (item.author_name || []).map(normalize);
+            const authors = (item.author_name || [])
+                .map(normalizeText);
 
             const authorMatches =
                 !wantedAuthor ||
@@ -463,15 +567,22 @@ async function findAlternativeCover(book) {
         const alternativeBook =
             matchingBook ||
             docs.find(item =>
-                normalize(item.title) === wantedTitle &&
+                normalizeText(item.title) === wantedTitle &&
                 item.cover_i
             );
 
         if (!alternativeBook) return null;
 
-        return `https://covers.openlibrary.org/b/id/${alternativeBook.cover_i}-M.jpg`;
+        return (
+            `https://covers.openlibrary.org/b/id/` +
+            `${alternativeBook.cover_i}-M.jpg`
+        );
     } catch (error) {
-        console.error("Error buscando portada alternativa:", error);
+        console.error(
+            "Error buscando portada alternativa:",
+            error
+        );
+
         return null;
     }
 }
@@ -502,7 +613,10 @@ function renderBookCards(books) {
 
         function showPlaceholder() {
             if (!coverContainer.isConnected) return;
-            coverContainer.replaceChildren(createBookPlaceholder());
+
+            coverContainer.replaceChildren(
+                createBookPlaceholder()
+            );
         }
 
         image.onerror = async () => {
@@ -514,7 +628,8 @@ function renderBookCards(books) {
 
             triedAlternative = true;
 
-            const alternativeCover = await findAlternativeCover(book);
+            const alternativeCover =
+                await findAlternativeCover(book);
 
             if (alternativeCover && image.isConnected) {
                 image.src = alternativeCover;
@@ -546,11 +661,13 @@ function renderBookCards(books) {
         details.className = "book-details";
 
         const title = document.createElement("h3");
-        title.textContent = book.title || "Título no disponible";
+        title.textContent =
+            book.title || "Título no disponible";
 
         const author = document.createElement("p");
         author.className = "book-author";
-        author.textContent = book.author || "Autor no disponible";
+        author.textContent =
+            book.author || "Autor no disponible";
 
         const genre = document.createElement("span");
         genre.className = "book-genre";
@@ -564,7 +681,14 @@ function renderBookCards(books) {
         reason.className = "book-reason";
         reason.textContent = book.reason || "";
 
-        details.append(title, author, genre, description, reason);
+        details.append(
+            title,
+            author,
+            genre,
+            description,
+            reason
+        );
+
         card.append(coverContainer, details);
 
         if (book.previewLink) {
@@ -602,7 +726,11 @@ function addBookCards(books) {
 function renderConversation(chat) {
     messagesContainer.innerHTML = "";
 
-    if (!chat || !Array.isArray(chat.messages) || chat.messages.length === 0) {
+    if (
+        !chat ||
+        !Array.isArray(chat.messages) ||
+        chat.messages.length === 0
+    ) {
         showWelcome();
         return;
     }
@@ -622,16 +750,27 @@ function renderConversation(chat) {
 // ENVIAR MENSAJES AL BACKEND
 // --------------------------------------------------
 
-async function sendMessage(message) {
-    const chatId = currentChatId;
-
+async function sendMessage(message, chatId) {
     try {
+        const chat = conversations.find(
+            item => item.id === chatId
+        );
+
+        if (!chat) return;
+
+        // Enviar los mensajes anteriores, sin duplicar el actual.
+        const conversationHistory = getConversationHistory(chat)
+            .slice(0, -1);
+
         const response = await fetch(API_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({
+                message,
+                conversationHistory
+            })
         });
 
         let data;
@@ -639,18 +778,23 @@ async function sendMessage(message) {
         try {
             data = await response.json();
         } catch {
-            throw new Error("El servidor devolvió una respuesta inválida.");
+            throw new Error(
+                "El servidor devolvió una respuesta inválida."
+            );
         }
 
         console.log("Respuesta del backend:", data);
 
         if (!response.ok) {
-            throw new Error(data.message || "Error al consultar el servidor.");
+            throw new Error(
+                data.message || "Error al consultar el servidor."
+            );
         }
 
-        const reply = data.response || data.reply || data.message;
+        const reply =
+            data.response || data.reply || data.message;
 
-        // No mezclar una respuesta con otro chat si el usuario cambió.
+        // Si se cambió de conversación, no mostrar la respuesta en otra.
         if (currentChatId !== chatId) return;
 
         if (reply) {
@@ -661,11 +805,12 @@ async function sendMessage(message) {
             addBookCards(data.books);
         }
 
-        // Evaluar el contexto después de cada respuesta.
         await updateContextualTitle(chatId);
-
     } catch (error) {
-        console.error("Error al comunicarse con BookMatch:", error);
+        console.error(
+            "Error al comunicarse con BookMatch:",
+            error
+        );
 
         if (currentChatId === chatId) {
             addMessage(
@@ -684,6 +829,7 @@ chatForm.addEventListener("submit", async event => {
     event.preventDefault();
 
     const text = messageInput.value.trim();
+
     if (!text) return;
 
     if (!getCurrentChat()) {
@@ -691,9 +837,9 @@ chatForm.addEventListener("submit", async event => {
     }
 
     const chatId = currentChatId;
-
-    // Guardar el mensaje en la conversación correspondiente.
-    const chat = conversations.find(item => item.id === chatId);
+    const chat = conversations.find(
+        item => item.id === chatId
+    );
 
     if (!chat) return;
 
@@ -704,13 +850,12 @@ chatForm.addEventListener("submit", async event => {
     });
 
     saveConversations();
-
     renderMessage(text, "user");
 
     messageInput.value = "";
     messageInput.focus();
 
-    await sendMessage(text);
+    await sendMessage(text, chatId);
 });
 
 newChatButton.addEventListener("click", () => {
@@ -721,11 +866,34 @@ newChatButton.addEventListener("click", () => {
 // INICIAR BOOKMATCH
 // --------------------------------------------------
 
-// Cada apertura o recarga inicia un chat nuevo.
-// El historial anterior se conserva.
-currentChatId = null;
-localStorage.removeItem(ACTIVE_CHAT_KEY);
+function initializeBookMatch() {
+    const savedActiveChatId =
+        localStorage.getItem(ACTIVE_CHAT_KEY);
 
-createConversation();
-renderHistory();
- 
+    let activeChat = conversations.find(
+        chat => chat.id === savedActiveChatId
+    );
+
+    // Si el chat activo no existe, recuperar el más reciente.
+    if (!activeChat && conversations.length > 0) {
+        activeChat = conversations[0];
+    }
+
+    // Crear conversación solamente si no hay ninguna guardada.
+    if (!activeChat) {
+        createConversation();
+        return;
+    }
+
+    currentChatId = activeChat.id;
+
+    localStorage.setItem(
+        ACTIVE_CHAT_KEY,
+        currentChatId
+    );
+
+    renderConversation(activeChat);
+    renderHistory();
+}
+
+initializeBookMatch();

@@ -27,7 +27,6 @@ function esErrorTemporal(error) {
 
 // Inicializar el cliente de Gemini
 async function getAI() {
-    // Verificar la clave cuando realmente se necesita Gemini
     if (!process.env.GEMINI_API_KEY) {
         throw new Error(
             "Falta configurar GEMINI_API_KEY en las variables de entorno."
@@ -46,8 +45,23 @@ async function getAI() {
 }
 
 // Generar respuesta y recomendaciones
-async function generateResponse(message) {
+async function generateResponse(message, conversationHistory = []) {
     const client = await getAI();
+
+    const history = Array.isArray(conversationHistory)
+        ? conversationHistory
+        : [];
+
+    const historialTexto = history
+        .filter(item => item && typeof item.text === "string")
+        .map(item => {
+            const role =
+                item.sender === "user" ? "Usuario" : "BookMatch";
+
+            return `${role}: ${item.text}`;
+        })
+        .slice(-12)
+        .join("\n");
 
     const maxIntentos = 4;
     let response = null;
@@ -60,47 +74,76 @@ async function generateResponse(message) {
 
             response = await client.models.generateContent({
                 model: "gemini-3.6-flash",
-                contents: message,
+                contents: `
+Historial de la conversación:
+${historialTexto || "(Esta es la primera interacción)"}
+
+Mensaje actual del usuario:
+${message}
+
+Respondé al mensaje actual teniendo en cuenta el historial.
+                `.trim(),
                 config: {
                     responseMimeType: "application/json",
                     systemInstruction: `
-                        Sos BookMatch, un recomendador de libros en español.
+Sos BookMatch, un recomendador de libros en español rioplatense.
 
-                        Respondé de forma cálida, natural y breve.
+PERSONALIDAD Y TONO:
+- Sos cálido, natural, cercano y amable.
+- Hablá como en una conversación continua, no como si cada mensaje fuera el primero.
+- Evitá introducciones largas y expresiones exageradas.
+- No repitas información que ya diste, salvo que el usuario la solicite.
 
-                        Devolvé siempre un JSON válido con esta estructura:
-                        {
-                          "reply": "Mensaje para el lector",
-                          "books": [
-                            {
-                              "title": "Título real del libro",
-                              "author": "Autor real",
-                              "genre": "Género",
-                              "description": "Descripción breve sin spoilers",
-                              "reason": "Por qué podría gustarle al lector"
-                            }
-                          ]
-                        }
+SALUDOS:
+- Saludá solamente cuando sea el inicio real de una conversación nueva
+  y todavía no haya ocurrido un saludo.
+- Si BookMatch ya saludó en el historial, NO vuelvas a saludar.
+- No empieces cada respuesta con "¡Hola!", "¡Hola de nuevo!",
+  "¡Qué bueno verte!" ni expresiones equivalentes.
+- Si el usuario cambia de tema, respondé directamente al nuevo tema.
+- Si el usuario ya empezó pidiendo libros, atendé su pedido sin agregar
+  un saludo innecesario.
+- Un nuevo mensaje no significa que haya comenzado una conversación nueva.
 
-                        Reglas:
-                        - Si el usuario pide recomendaciones, sugerí entre 3 y 5 libros.
-                        - Si pide fantasía, recomendá libros de fantasía.
-                        - Usá títulos y autores reales.
-                        - No reveles finales ni spoilers importantes.
-                        - Si el usuario solo saluda, respondé amablemente
-                          y devolvé "books": [].
-                        - Si todavía no conocés sus gustos, podés preguntarle
-                          qué tipo de historias disfruta y devolver "books": [].
-                        - El campo "reply" debe contener una introducción breve.
-                        - Devolvé únicamente JSON válido, sin Markdown
-                          ni bloques de código.
+RECOMENDACIONES:
+- Si el usuario pide recomendaciones, sugerí entre 3 y 5 libros.
+- Adaptá los títulos a lo que pide: autor, género, saga, temática o preferencias.
+- Usá títulos y autores reales.
+- No inventes datos bibliográficos ni presentes datos dudosos como hechos.
+- No reveles finales ni spoilers importantes.
+- Explicá brevemente de qué trata cada libro y por qué podría gustarle.
+- Si el usuario cambia de género o temática, seguí su nueva solicitud.
+- Si pide información que no requiere recomendaciones, respondé directamente
+  y devolvé "books": [].
+
+PRIMER CONTACTO:
+- Si el usuario solamente saluda, respondé amablemente y devolvé "books": [].
+- Si todavía no conocés sus gustos y no hizo una petición concreta,
+  podés preguntarle qué tipo de historias disfruta y devolver "books": [].
+
+FORMATO:
+Devolvé siempre un JSON válido con esta estructura:
+{
+  "reply": "Respuesta conversacional para el lector",
+  "books": [
+    {
+      "title": "Título del libro",
+      "author": "Autor",
+      "genre": "Género",
+      "description": "Descripción breve sin spoilers",
+      "reason": "Por qué podría gustarle al lector"
+    }
+  ]
+}
+
+- El campo "reply" debe contener una introducción breve y natural.
+- No incluyas saludos repetidos en "reply".
+- Devolvé únicamente JSON válido, sin Markdown ni bloques de código.
                     `
                 }
             });
 
-            // La petición fue exitosa
             break;
-
         } catch (error) {
             console.error(
                 `Error de Gemini en intento ${intento}:`,
@@ -111,7 +154,6 @@ async function generateResponse(message) {
                 throw error;
             }
 
-            // Esperas progresivas: 1, 2 y 4 segundos
             const demora = 1000 * (2 ** (intento - 1));
 
             console.log(
@@ -126,7 +168,6 @@ async function generateResponse(message) {
         throw new Error("Gemini devolvió una respuesta vacía.");
     }
 
-    // Interpretar la respuesta JSON
     try {
         const resultado = JSON.parse(response.text);
 
@@ -140,10 +181,9 @@ async function generateResponse(message) {
             );
         }
 
-        // Normalizar los libros para evitar datos incompletos
         resultado.books = resultado.books
-            .filter((book) => book && typeof book === "object")
-            .map((book) => ({
+            .filter(book => book && typeof book === "object")
+            .map(book => ({
                 title: String(book.title || "Título no disponible"),
                 author: String(book.author || "Autor no disponible"),
                 genre: String(book.genre || "Literatura"),
@@ -152,7 +192,6 @@ async function generateResponse(message) {
             }));
 
         return resultado;
-
     } catch (error) {
         console.error(
             "Error interpretando el JSON de Gemini:",
